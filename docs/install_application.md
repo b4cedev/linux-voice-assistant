@@ -193,6 +193,7 @@ Environment=PREFERENCES_FILE="/home/pi/linux-voice-assistant/preferences.json"
 # Environment=TIMER_FINISHED_SOUND="sounds/timer_finished.flac"
 # Environment=PROCESSING_SOUND="sounds/processing.wav"
 # Environment=LISTEN_DURING_WAKE_SOUND="0"
+# Environment=WAKEUP_PREROLL_MS="0"
 # Environment=MUTE_SOUND="sounds/mute_switch_on.flac"
 # Environment=UNMUTE_SOUND="sounds/mute_switch_off.flac"
 # Environment=PERIPHERAL_HOST="0.0.0.0"
@@ -287,6 +288,7 @@ The following variables can be configured in the `.env` or in the service file:
 | `TIMER_FINISHED_SOUND` | `sounds/timer_finished.flac` | Sound file for timer finished |
 | `PROCESSING_SOUND` | `sounds/processing.wav` | Sound file for processing state |
 | `LISTEN_DURING_WAKE_SOUND` | false | Set to "1" to start listening immediately after wake word detection, without waiting for the wake sound to finish |
+| `WAKEUP_PREROLL_MS` | 0 | Milliseconds of audio from before the wake word detection to send along when listening starts immediately (see below). 0 = off |
 | `MUTE_SOUND` | `sounds/mute_switch_on.flac` | Sound file for mute on |
 | `UNMUTE_SOUND` | `sounds/mute_switch_off.flac` | Sound file for mute off |
 | `PERIPHERAL_HOST` | 0.0.0.0 | Host for the peripheral WebSocket API |
@@ -307,6 +309,10 @@ Enable `LISTEN_DURING_WAKE_SOUND="1"` to let LVA begin listening immediately aft
 This feature is especially useful when you want a more natural interaction flow and do not want to wait to confirm that the wake word was detected before speaking the command.
 
 Keep in mind that listening while the wake sound is playing can also make the microphone pick up some of that wake sound as echo, depending on your speaker and microphone setup. This echo can interfere with speech-to-text and make commands less accurate. If you run into this, see [Enabling Acoustic Echo Cancellation (AEC)](enabling_aec.md).
+
+#### Pre-roll
+
+LVA only streams audio to Home Assistant after the wake word was detected, and detection fires a little after the word ended. Set `WAKEUP_PREROLL_MS` (for example `128`) to keep that much audio in a small ring buffer and send it right after the pipeline starts, so the beginning of a command that directly follows the wake word is not lost. The value is rounded up to whole audio blocks (64 ms each with the default block size). Larger values reach back into the wake word itself, which can end up in the transcript, so tune it on your device. Pre-roll only applies when listening starts immediately: with `LISTEN_DURING_WAKE_SOUND="1"`, or with an empty `--wakeup-sound ""` (no wake sound at all, which also avoids the sound being picked up as echo; with Docker pass it as `command:` argument).
 
 
 ### Use own soundfiles:

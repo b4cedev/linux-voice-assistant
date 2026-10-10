@@ -76,7 +76,7 @@ For all other users, we have different installation methods available (Docker, s
 ```sh
 usage: __main__.py [-h] [--name NAME] [--audio-input-device AUDIO_INPUT_DEVICE] [--list-input-devices] [--audio-input-block-size AUDIO_INPUT_BLOCK_SIZE] [--audio-output-device AUDIO_OUTPUT_DEVICE] [--music-output-device MUSIC_OUTPUT_DEVICE] [--list-output-devices] [--wake-word-dir WAKE_WORD_DIR]  [--mic-auto-gain] [--mic-noise-suppression]
                    [--wake-model WAKE_MODEL] [--stop-model STOP_MODEL] [--download-dir DOWNLOAD_DIR] [--refractory-seconds REFRACTORY_SECONDS] [--wakeup-sound WAKEUP_SOUND] [--timer-finished-sound TIMER_FINISHED_SOUND] [--processing-sound PROCESSING_SOUND]
-                   [--mute-sound MUTE_SOUND] [--unmute-sound UNMUTE_SOUND] [--preferences-file PREFERENCES_FILE] [--host HOST] [--network-interface NETWORK_INTERFACE] [--port PORT] [--enable-thinking-sound] [--listen-during-wake-sound] [--debug]
+                   [--mute-sound MUTE_SOUND] [--unmute-sound UNMUTE_SOUND] [--preferences-file PREFERENCES_FILE] [--host HOST] [--network-interface NETWORK_INTERFACE] [--port PORT] [--enable-thinking-sound] [--listen-during-wake-sound] [--wakeup-preroll-ms MS] [--debug]
 ```
 
 | Parameter                       | Description                                                   | Default                              |
@@ -97,7 +97,7 @@ usage: __main__.py [-h] [--name NAME] [--audio-input-device AUDIO_INPUT_DEVICE] 
 | `--refractory-seconds`          | Seconds before wake word can be activated again               | 2.0                                  |
 | `--continue-conversation-delay` | Delay before mic opens for continued conversation             | 0.5                                  |
 | `--timer-max-ring-seconds`      | Seconds after which the timer stops ringing                   | 900.0                                |
-| `--wakeup-sound`                | Sound file played when wake word is detected                  | `sounds/wake_word_triggered.flac`    |
+| `--wakeup-sound`                | Sound file played when wake word is detected (empty = no sound) | `sounds/wake_word_triggered.flac`    |
 | `--start-listening-sound`       | Sound file played when button is pressed to start listening   | `sounds/start_listening_button.flac` |
 | `--timer-finished-sound`        | Sound file played when timer finishes                         | `sounds/timer_finished.flac`         |
 | `--processing-sound`            | Sound played while assistant is processing                    | `sounds/processing.wav`              |
@@ -109,6 +109,7 @@ usage: __main__.py [-h] [--name NAME] [--audio-input-device AUDIO_INPUT_DEVICE] 
 | `--port`                        | Port for ESPHome server                                       | 6053                                 |
 | `--enable-thinking-sound`       | Enable thinking sound on startup                              | False                                |
 | `--listen-during-wake-sound`    | Start listening while the wake sound is still playing         | False                                |
+| `--wakeup-preroll-ms`           | Send this much audio from before the detection when listening starts immediately (0 = off) | 0                                    |
 | `--peripheral-host`             | Bind address for the peripheral WebSocket API                 | 0.0.0.0                              |
 | `--peripheral-port`             | Port for the peripheral WebSocket API                         | 6055                                 |
 | `--peripheral-volume-step`      | Volume change per button press, 0.0–1.0                       | %(default)s                          |

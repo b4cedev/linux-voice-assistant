@@ -96,6 +96,10 @@ if [ -n "${WAKEUP_SOUND}" ]; then
   EXTRA_ARGS+=( "--wakeup-sound" "$WAKEUP_SOUND" )
 fi
 
+if [ -n "${WAKEUP_PREROLL_MS}" ]; then
+  EXTRA_ARGS+=( "--wakeup-preroll-ms" "$WAKEUP_PREROLL_MS" )
+fi
+
 if [ -n "${START_LISTENING_SOUND}" ]; then
   EXTRA_ARGS+=( "--start-listening-sound" "$START_LISTENING_SOUND" )
 fi

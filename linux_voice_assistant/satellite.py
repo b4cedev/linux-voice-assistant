@@ -7,9 +7,10 @@ import posixpath
 import shutil
 import threading
 import time
+from collections import deque
 from collections.abc import Iterable
 from functools import partial
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Deque, Dict, List, Optional, Set, Tuple, Union
 from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen
 
@@ -343,6 +344,8 @@ class VoiceSatelliteProtocol(APIServer):
         # ---- Instance variables ----
 
         self._is_streaming_audio = False
+        self._preroll: Deque[Tuple[bytes, Optional[bytes]]] = deque(maxlen=state.preroll_blocks)
+        self._preroll_pending = False
         self._tts_url: Optional[str] = None
         self._tts_played = False
         self._continue_conversation = False
@@ -867,12 +870,32 @@ class VoiceSatelliteProtocol(APIServer):
 
     # handle_audio — both channels in ONE message
     def handle_audio(self, audio_chunk: bytes, audio_chunk_2: Optional[bytes] = None) -> None:
-        if not self._is_streaming_audio or self.state.muted:
+        """
+        Forward a mic block to Home Assistant while streaming, otherwise keep it in the pre-roll buffer.
+        Must only be called from the audio thread, which is the sole writer of the pre-roll buffer.
+        """
+        if self.state.muted:
+            self._preroll.clear()
             return
-        if _HAS_AUDIO_DATA2 and audio_chunk_2 is not None:
-            self.send_messages([VoiceAssistantAudio(data=audio_chunk, data2=audio_chunk_2)])
-        else:
-            self.send_messages([VoiceAssistantAudio(data=audio_chunk)])
+
+        if not self._is_streaming_audio:
+            if self._preroll.maxlen:
+                self._preroll.append((audio_chunk, audio_chunk_2))
+            return
+
+        if self._preroll_pending:
+            self._preroll_pending = False
+            blocks = list(self._preroll)
+            self._preroll.clear()
+            blocks.append((audio_chunk, audio_chunk_2))
+            self.send_messages([self._audio_message(chunk, chunk_2) for chunk, chunk_2 in blocks])
+            return
+
+        # Streaming was started by something other than an immediate wake word start (chime finished,
+        # button, continued conversation), so whatever is buffered is stale.
+        if self._preroll:
+            self._preroll.clear()
+        self.send_messages([self._audio_message(audio_chunk, audio_chunk_2)])
 
     # ------------------------------------------------------------------
     # Wake word / stop
@@ -897,7 +920,10 @@ class VoiceSatelliteProtocol(APIServer):
         self._pipeline_active = True
         self._emit(LVAEvent.WAKE_WORD_DETECTED)
         self.duck()
-        if self.state.listen_during_wake_sound:
+        if not self.state.wakeup_sound:
+            _LOGGER.debug("Starting audio streaming immediately (no wakeup sound)")
+            self._start_audio_streaming(wake_word_phrase)
+        elif self.state.listen_during_wake_sound:
             _LOGGER.debug("Starting audio streaming immediately (listen_during_wake_sound enabled)")
             self.state.tts_player.play(self.state.wakeup_sound)
             self._start_audio_streaming(wake_word_phrase)
@@ -914,6 +940,7 @@ class VoiceSatelliteProtocol(APIServer):
             wake_word_phrase,
         )
         self.send_messages([VoiceAssistantRequest(start=True, wake_word_phrase=wake_word_phrase)])
+        self._preroll_pending = True
         self._is_streaming_audio = True
         self._emit(LVAEvent.LISTENING)
 
@@ -1226,3 +1253,10 @@ class VoiceSatelliteProtocol(APIServer):
             trained_languages=external_wake_word.trained_languages,
             wake_word_path=config_path,
         )
+
+    @staticmethod
+    def _audio_message(audio_chunk: bytes, audio_chunk_2: Optional[bytes]) -> VoiceAssistantAudio:
+        """Build the audio message; the reference channel travels in ``data2`` when present and supported."""
+        if _HAS_AUDIO_DATA2 and audio_chunk_2 is not None:
+            return VoiceAssistantAudio(data=audio_chunk, data2=audio_chunk_2)
+        return VoiceAssistantAudio(data=audio_chunk)

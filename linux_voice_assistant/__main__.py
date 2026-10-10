@@ -4,6 +4,7 @@ import asyncio
 import errno
 import json
 import logging
+import math
 import sys
 import threading
 import time
@@ -234,6 +235,15 @@ async def main() -> None:
         help="Start listening immediately after wake word detection, without waiting for the wake sound to finish",
     )
     parser.add_argument(
+        "--wakeup-preroll-ms",
+        type=int,
+        default=0,
+        help=(
+            "Milliseconds of audio from before the wake word detection to send along when streaming starts immediately "
+            "(rounded up to whole audio blocks; 0 = off). Only effective with --listen-during-wake-sound or an empty --wakeup-sound."
+        ),
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Add this to enable debug logging",
@@ -462,6 +472,7 @@ async def main() -> None:
         audio_input_channels=args.audio_input_channels,
         timer_max_ring_seconds=args.timer_max_ring_seconds,
         listen_during_wake_sound=args.listen_during_wake_sound,
+        preroll_blocks=_preroll_ms_to_blocks(args.wakeup_preroll_ms, args.audio_input_block_size),
     )
 
     if fallback_used:
@@ -638,6 +649,13 @@ def _setup_logging(args: argparse.Namespace) -> None:
 
 
 # -----------------------------------------------------------------------------
+
+
+def _preroll_ms_to_blocks(preroll_ms: int, block_size: int) -> int:
+    """Convert a pre-roll duration in milliseconds to a whole number of 16 kHz audio blocks (rounded up)."""
+    if preroll_ms <= 0:
+        return 0
+    return math.ceil(preroll_ms * 16 / block_size)
 
 
 def process_audio(state: ServerState, mic, block_size: int):

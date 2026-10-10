@@ -233,3 +233,18 @@ class TestPreferencesFromArgs:
         if enable_thinking_sound:
             prefs.thinking_sound = 1
         assert prefs.thinking_sound == 1
+
+
+class TestPrerollMsToBlocks:
+    def test_zero_or_negative_is_off(self):
+        from linux_voice_assistant.__main__ import _preroll_ms_to_blocks
+
+        assert _preroll_ms_to_blocks(0, 1024) == 0
+        assert _preroll_ms_to_blocks(-5, 1024) == 0
+
+    def test_rounds_up_to_whole_blocks(self):
+        from linux_voice_assistant.__main__ import _preroll_ms_to_blocks
+
+        assert _preroll_ms_to_blocks(64, 1024) == 1
+        assert _preroll_ms_to_blocks(65, 1024) == 2
+        assert _preroll_ms_to_blocks(300, 1024) == 5

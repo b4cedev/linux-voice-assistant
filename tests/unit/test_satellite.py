@@ -245,6 +245,105 @@ class TestHandleAudio:
 
 
 # ---------------------------------------------------------------------------
+# Pre-roll
+# ---------------------------------------------------------------------------
+
+
+def _preroll_satellite(tmp_path, blocks=3, **state_overrides):
+    sat = make_satellite(tmp_path, {"preroll_blocks": blocks, "listen_during_wake_sound": True, **state_overrides})
+    sat.send_messages = MagicMock()
+    sat._pipeline_active = False
+    return sat
+
+
+def _wake_word():
+    wake_word = MagicMock()
+    wake_word.wake_word = "okay nabu"
+    return wake_word
+
+
+def _sent_types(sat):
+    return [[type(m).__name__ for m in call.args[0]] for call in sat.send_messages.call_args_list]
+
+
+class TestPreroll:
+    def test_buffers_only_last_blocks_while_idle(self, tmp_path):
+        sat = _preroll_satellite(tmp_path, blocks=2)
+        for i in range(4):
+            sat.handle_audio(bytes([i]) * 4)
+        assert [chunk for chunk, _ in sat._preroll] == [b"\x02" * 4, b"\x03" * 4]
+        sat.send_messages.assert_not_called()
+
+    def test_disabled_buffers_nothing(self, tmp_path):
+        sat = _preroll_satellite(tmp_path, blocks=0)
+        sat.handle_audio(b"\x01" * 4)
+        assert len(sat._preroll) == 0
+
+    def test_muted_does_not_buffer_and_clears(self, tmp_path):
+        sat = _preroll_satellite(tmp_path)
+        sat.handle_audio(b"\x01" * 4)
+        sat.state.muted = True
+        sat.handle_audio(b"\x02" * 4)
+        assert len(sat._preroll) == 0
+
+    def test_wakeup_sends_request_then_buffered_then_live_block(self, tmp_path):
+        sat = _preroll_satellite(tmp_path)
+        sat.handle_audio(b"\x01" * 4, b"\x0a" * 4)
+        sat.handle_audio(b"\x02" * 4, b"\x0b" * 4)
+        sat.wakeup(_wake_word())
+        assert _sent_types(sat) == [["VoiceAssistantRequest"]]
+
+        sat.handle_audio(b"\x03" * 4, b"\x0c" * 4)
+        assert _sent_types(sat)[1] == ["VoiceAssistantAudio"] * 3
+        audio = sat.send_messages.call_args_list[1].args[0]
+        assert [m.data for m in audio] == [b"\x01" * 4, b"\x02" * 4, b"\x03" * 4]
+        assert len(sat._preroll) == 0
+
+        sat.handle_audio(b"\x04" * 4)
+        assert _sent_types(sat)[2] == ["VoiceAssistantAudio"]
+
+    def test_data2_is_kept_in_preroll(self, tmp_path):
+        from linux_voice_assistant import satellite as sat_module
+
+        if not sat_module._HAS_AUDIO_DATA2:
+            pytest.skip("aioesphomeapi without data2")
+        sat = _preroll_satellite(tmp_path)
+        sat.handle_audio(b"\x01" * 4, b"\x0a" * 4)
+        sat.wakeup(_wake_word())
+        sat.handle_audio(b"\x02" * 4, b"\x0b" * 4)
+        audio = sat.send_messages.call_args_list[1].args[0]
+        assert [m.data2 for m in audio] == [b"\x0a" * 4, b"\x0b" * 4]
+
+    def test_chime_mode_sends_no_preroll_and_clears_buffer(self, tmp_path):
+        sat = _preroll_satellite(tmp_path, listen_during_wake_sound=False)
+        sat.handle_audio(b"\x01" * 4)
+        sat.wakeup(_wake_word())
+        sat.state.tts_player.play.assert_called_once()
+        sat.send_messages.assert_not_called()
+
+        sat._on_wakeup_sound_finished("okay nabu")
+        sat._preroll_pending = False
+        sat.handle_audio(b"\x02" * 4)
+        assert _sent_types(sat)[-1] == ["VoiceAssistantAudio"]
+        assert len(sat._preroll) == 0
+
+    def test_pipeline_active_ignores_wakeup(self, tmp_path):
+        sat = _preroll_satellite(tmp_path)
+        sat._pipeline_active = True
+        sat.handle_audio(b"\x01" * 4)
+        sat.wakeup(_wake_word())
+        sat.send_messages.assert_not_called()
+        assert sat._is_streaming_audio is False
+
+    def test_empty_wakeup_sound_streams_without_playing(self, tmp_path):
+        sat = _preroll_satellite(tmp_path, listen_during_wake_sound=False, wakeup_sound="")
+        sat.wakeup(_wake_word())
+        sat.state.tts_player.play.assert_not_called()
+        assert sat._is_streaming_audio is True
+        assert _sent_types(sat) == [["VoiceAssistantRequest"]]
+
+
+# ---------------------------------------------------------------------------
 # play_tts()
 # ---------------------------------------------------------------------------
 
